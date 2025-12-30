@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { League } from '../types';
-import { getLeagues, createLeague, importLeagueData } from '../services/storageService';
+import { getLeagues, createLeague } from '../services/storageService';
 
 interface LeagueAuthProps {
   onLeagueSelected: (leagueId: string) => void;
@@ -8,7 +8,8 @@ interface LeagueAuthProps {
 
 const LeagueAuth: React.FC<LeagueAuthProps> = ({ onLeagueSelected }) => {
   const [leagues, setLeagues] = useState<League[]>([]);
-  const [view, setView] = useState<'list' | 'create' | 'import'>('list');
+  const [view, setView] = useState<'list' | 'create'>('list');
+  const [isLoading, setIsLoading] = useState(false);
   
   // Create Form
   const [newName, setNewName] = useState('');
@@ -19,18 +20,34 @@ const LeagueAuth: React.FC<LeagueAuthProps> = ({ onLeagueSelected }) => {
   const [passwordAttempt, setPasswordAttempt] = useState('');
   const [error, setError] = useState('');
 
-  // Import Form
-  const [importJson, setImportJson] = useState('');
-
   useEffect(() => {
-    setLeagues(getLeagues());
+    loadLeagues();
   }, []);
 
-  const handleCreate = (e: React.FormEvent) => {
+  const loadLeagues = async () => {
+      setIsLoading(true);
+      try {
+        const fetched = await getLeagues();
+        setLeagues(fetched);
+      } catch (e) {
+          console.error(e);
+          setError("Failed to connect to the Strategium network.");
+      } finally {
+          setIsLoading(false);
+      }
+  };
+
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) return;
-    const league = createLeague(newName, newPassword);
-    onLeagueSelected(league.id);
+    setIsLoading(true);
+    try {
+        const league = await createLeague(newName, newPassword);
+        onLeagueSelected(league.id);
+    } catch (e) {
+        setError("Creation failed.");
+        setIsLoading(false);
+    }
   };
 
   const handleLogin = (e: React.FormEvent) => {
@@ -44,16 +61,6 @@ const LeagueAuth: React.FC<LeagueAuthProps> = ({ onLeagueSelected }) => {
     }
     onLeagueSelected(league.id);
   };
-
-  const handleImport = (e: React.FormEvent) => {
-      e.preventDefault();
-      const league = importLeagueData(importJson, newName, newPassword);
-      if (league) {
-          onLeagueSelected(league.id);
-      } else {
-          setError("Data Corrupt: Import Failed");
-      }
-  }
 
   return (
     <div className="min-h-screen bg-auspex-bg flex items-center justify-center p-4">
@@ -72,7 +79,9 @@ const LeagueAuth: React.FC<LeagueAuthProps> = ({ onLeagueSelected }) => {
 
         {view === 'list' && (
             <div className="space-y-4">
-                {leagues.length === 0 ? (
+                {isLoading ? (
+                    <div className="text-center text-imperial-gold animate-pulse">Scanning frequencies...</div>
+                ) : leagues.length === 0 ? (
                     <div className="text-center text-gray-500 py-4 italic">No active campaigns found in this quadrant.</div>
                 ) : (
                     <div className="space-y-2 max-h-60 overflow-y-auto">
@@ -120,10 +129,11 @@ const LeagueAuth: React.FC<LeagueAuthProps> = ({ onLeagueSelected }) => {
                         + New League
                     </button>
                     <button 
-                        onClick={() => setView('import')}
-                        className="flex-1 bg-auspex-border text-text-primary text-sm font-bold uppercase py-2 rounded hover:bg-slate-600 transition-colors"
+                        onClick={() => loadLeagues()}
+                        className="w-10 bg-auspex-border text-text-primary rounded hover:bg-slate-600 flex items-center justify-center"
+                        title="Refresh"
                     >
-                        Import Data
+                        ↻
                     </button>
                 </div>
             </div>
@@ -152,7 +162,6 @@ const LeagueAuth: React.FC<LeagueAuthProps> = ({ onLeagueSelected }) => {
                         className="w-full bg-black/50 border border-gray-600 text-white rounded p-2 focus:border-imperial-gold outline-none"
                         placeholder="Leave blank for public access"
                     />
-                    <p className="text-[10px] text-gray-500 mt-1">Note: This is a client-side lock. It prevents accidental edits but is not military-grade encryption.</p>
                 </div>
                 <div className="flex gap-2 pt-2">
                     <button 
@@ -164,55 +173,13 @@ const LeagueAuth: React.FC<LeagueAuthProps> = ({ onLeagueSelected }) => {
                     </button>
                     <button 
                         type="submit" 
-                        className="flex-1 bg-imperial-gold text-black font-bold uppercase py-2 rounded hover:bg-yellow-400 transition-colors"
+                        disabled={isLoading}
+                        className="flex-1 bg-imperial-gold text-black font-bold uppercase py-2 rounded hover:bg-yellow-400 transition-colors disabled:opacity-50"
                     >
-                        Initialize
+                        {isLoading ? 'Initializing...' : 'Initialize'}
                     </button>
                 </div>
             </form>
-        )}
-
-        {view === 'import' && (
-             <form onSubmit={handleImport} className="space-y-4 animate-fade-in">
-                <h3 className="text-lg font-bold text-white uppercase border-b border-auspex-border pb-2">Import Data Cogitator</h3>
-                <div>
-                    <label className="block text-xs text-text-secondary uppercase mb-1">New League Name</label>
-                    <input 
-                        type="text"
-                        value={newName}
-                        onChange={e => setNewName(e.target.value)}
-                        className="w-full bg-black/50 border border-gray-600 text-white rounded p-2 focus:border-imperial-gold outline-none"
-                        placeholder="Name for imported league"
-                        required
-                    />
-                </div>
-                <div>
-                    <label className="block text-xs text-text-secondary uppercase mb-1">JSON Data Payload</label>
-                    <textarea 
-                        value={importJson}
-                        onChange={e => setImportJson(e.target.value)}
-                        className="w-full h-32 bg-black/50 border border-gray-600 text-white rounded p-2 focus:border-imperial-gold outline-none font-mono text-xs"
-                        placeholder="Paste JSON string here..."
-                        required
-                    />
-                </div>
-                {error && <div className="text-red-500 text-xs">{error}</div>}
-                <div className="flex gap-2 pt-2">
-                    <button 
-                        type="button" 
-                        onClick={() => setView('list')}
-                        className="flex-1 bg-transparent border border-auspex-border text-text-secondary text-sm font-bold uppercase py-2 rounded hover:bg-white/5 transition-colors"
-                    >
-                        Cancel
-                    </button>
-                    <button 
-                        type="submit" 
-                        className="flex-1 bg-green-600 text-white font-bold uppercase py-2 rounded hover:bg-green-500 transition-colors"
-                    >
-                        Process Data
-                    </button>
-                </div>
-             </form>
         )}
       </div>
     </div>

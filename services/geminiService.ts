@@ -19,7 +19,6 @@ export const generateBattleNarrative = async (
   const modelId = "gemini-3-flash-preview";
 
   const winner = match.winnerId === player1.id ? player1.name : (match.winnerId === player2.id ? player2.name : "No one (Draw)");
-  const loser = match.winnerId === player1.id ? player2.name : (match.winnerId === player2.id ? player1.name : "No one");
 
   const prompt = `
     Write a short, dramatic, Warhammer 40k style battle report (max 150 words).

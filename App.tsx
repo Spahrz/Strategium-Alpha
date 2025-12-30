@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import MatchReporter from './components/MatchReporter';
@@ -7,17 +7,19 @@ import Pairings from './components/Pairings';
 import LeagueAuth from './components/LeagueAuth';
 import { Player, Match, LeagueSettings, Pairing, Faction } from './types';
 import { 
-  getPlayers, savePlayers, 
-  getMatches, saveMatches, 
-  getSettings, saveSettings,
-  getPairings, savePairings,
-  recalculateStandings,
-  exportLeagueData
+  subscribeToPlayers, addPlayerToLeague, updatePlayer, removePlayer,
+  subscribeToMatches, addMatch,
+  subscribeToSettings,
+  subscribeToPairings, addPairing, updatePairing,
+  recalculateStandings
 } from './services/storageService';
 
 function App() {
   const [activeLeagueId, setActiveLeagueId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
+  
+  // Data State
+  const [rawPlayers, setRawPlayers] = useState<Player[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
   const [pairings, setPairings] = useState<Pairing[]>([]);
@@ -25,81 +27,80 @@ function App() {
   
   const [matchReportInitialData, setMatchReportInitialData] = useState<Partial<Match> | null>(null);
 
-  // Load Data whenever activeLeagueId changes
+  // --- Real-time Subscriptions ---
   useEffect(() => {
     if (!activeLeagueId) return;
 
-    const loadedPlayers = getPlayers(activeLeagueId);
-    const loadedMatches = getMatches(activeLeagueId);
-    const loadedSettings = getSettings(activeLeagueId);
-    const loadedPairings = getPairings(activeLeagueId);
+    setRawPlayers([]);
+    setMatches([]);
+    setPairings([]);
+    setSettings(null);
 
-    const updatedPlayers = recalculateStandings(loadedPlayers, loadedMatches);
-    
-    setPlayers(updatedPlayers);
-    setMatches(loadedMatches);
-    setSettings(loadedSettings);
-    setPairings(loadedPairings);
-    
-    // Default tab
-    setActiveTab('dashboard');
+    const unsubSettings = subscribeToSettings(activeLeagueId, setSettings);
+    const unsubPlayers = subscribeToPlayers(activeLeagueId, setRawPlayers);
+    const unsubMatches = subscribeToMatches(activeLeagueId, setMatches);
+    const unsubPairings = subscribeToPairings(activeLeagueId, setPairings);
+
+    return () => {
+        unsubSettings();
+        unsubPlayers();
+        unsubMatches();
+        unsubPairings();
+    };
   }, [activeLeagueId]);
 
-  // --- Players Handlers ---
+  // Recalculate Standings
+  useEffect(() => {
+    if (rawPlayers.length > 0 || matches.length > 0) {
+        setPlayers(recalculateStandings(rawPlayers, matches));
+    } else {
+        setPlayers([]);
+    }
+  }, [rawPlayers, matches]);
 
-  const handleAddPlayer = (name: string, faction: Faction) => {
+  // --- Handlers ---
+
+  const handleAddPlayer = async (name: string, faction: Faction) => {
     if (!activeLeagueId) return;
-    const newPlayer: Player = {
-        id: Date.now().toString(),
-        leagueId: activeLeagueId,
-        name,
-        faction,
-        gamesPlayed: 0,
-        wins: 0,
-        losses: 0,
-        draws: 0,
-        paintingPoints: 0,
-        gamingPoints: 0,
-        totalPoints: 0
-    };
-    const updatedPlayers = [...players, newPlayer];
-    setPlayers(updatedPlayers);
-    savePlayers(activeLeagueId, updatedPlayers);
+    try {
+        await addPlayerToLeague(activeLeagueId, {
+            leagueId: activeLeagueId,
+            name,
+            faction,
+            gamesPlayed: 0,
+            wins: 0,
+            losses: 0,
+            draws: 0,
+            paintingPoints: 0,
+            gamingPoints: 0,
+            totalPoints: 0
+        });
+    } catch (e) { console.error(e); }
   };
 
-  const handleRemovePlayer = (id: string) => {
+  const handleRemovePlayer = async (id: string) => {
     if (!activeLeagueId) return;
-    const updatedPlayers = players.filter(p => p.id !== id);
-    setPlayers(updatedPlayers);
-    savePlayers(activeLeagueId, updatedPlayers);
+    try { await removePlayer(activeLeagueId, id); } catch (e) { console.error(e); }
   };
 
-  const handleUpdatePainting = (playerId: string, points: number) => {
+  const handleUpdatePainting = async (playerId: string, points: number) => {
     if (!activeLeagueId) return;
-    const updatedPlayers = players.map(p => 
-      p.id === playerId ? { ...p, paintingPoints: points, totalPoints: p.gamingPoints + points } : p
-    ).sort((a, b) => b.totalPoints - a.totalPoints);
-
-    setPlayers(updatedPlayers);
-    savePlayers(activeLeagueId, updatedPlayers);
+    try { await updatePlayer(activeLeagueId, playerId, { paintingPoints: points }); } catch (e) { console.error(e); }
   };
 
-  // --- Pairings Handlers ---
-
-  const handleAddPairing = (p1Id: string, p2Id: string, mission: string) => {
+  const handleAddPairing = async (p1Id: string, p2Id: string, mission: string) => {
       if (!settings || !activeLeagueId) return;
-      const newPairing: Pairing = {
-          id: Date.now().toString(),
-          leagueId: activeLeagueId,
-          player1Id: p1Id,
-          player2Id: p2Id,
-          mission,
-          week: settings.currentWeek,
-          completed: false
-      };
-      const updatedPairings = [...pairings, newPairing];
-      setPairings(updatedPairings);
-      savePairings(activeLeagueId, updatedPairings);
+      try {
+          await addPairing(activeLeagueId, {
+              id: Date.now().toString(),
+              leagueId: activeLeagueId,
+              player1Id: p1Id,
+              player2Id: p2Id,
+              mission,
+              week: settings.currentWeek,
+              completed: false
+          });
+      } catch (e) { console.error(e); }
   };
 
   const handleInitiateReport = (pairing: Pairing) => {
@@ -112,48 +113,51 @@ function App() {
       setActiveTab('matches');
   };
 
-  // --- Match Handlers ---
-
-  const handleReportMatch = (match: Match) => {
+  const handleReportMatch = async (match: Match) => {
     if (!activeLeagueId) return;
-    
-    // Ensure league ID is set
     match.leagueId = activeLeagueId;
 
-    const newMatches = [...matches, match];
-    setMatches(newMatches);
-    saveMatches(activeLeagueId, newMatches);
+    try {
+        await addMatch(activeLeagueId, match);
+        const specificPairing = pairings.find(p => p.id === match.id);
+        const pairing = pairings.find(p => 
+            p.week === match.week && 
+            ((p.player1Id === match.player1Id && p.player2Id === match.player2Id) || 
+             (p.player1Id === match.player2Id && p.player2Id === match.player1Id))
+        );
 
-    const updatedPairings = pairings.map(p => 
-        p.id === match.id ? { ...p, completed: true } : p
-    );
-    setPairings(updatedPairings);
-    savePairings(activeLeagueId, updatedPairings);
-
-    const updatedPlayers = recalculateStandings(players, newMatches);
-    setPlayers(updatedPlayers);
-    savePlayers(activeLeagueId, updatedPlayers);
-    
-    setMatchReportInitialData(null);
+        if (specificPairing) {
+            await updatePairing(activeLeagueId, specificPairing.id, { completed: true });
+        } else if (pairing) {
+            await updatePairing(activeLeagueId, pairing.id, { completed: true });
+        }
+        setMatchReportInitialData(null);
+    } catch (e) { console.error(e); }
   };
 
   const handleExport = () => {
-      if (!activeLeagueId) return;
-      const json = exportLeagueData(activeLeagueId);
-      navigator.clipboard.writeText(json).then(() => {
-          alert("League Data copied to clipboard! Share this JSON string with your friends so they can import it.");
-      });
+    if (!activeLeagueId) return;
+    alert("Full JSON export is limited in cloud mode. Please use the dashboard to view data.");
   };
 
   const handleLogout = () => {
       setActiveLeagueId(null);
   };
 
+  // --- Views ---
+
   if (!activeLeagueId) {
-      return <LeagueAuth onLeagueSelected={setActiveLeagueId} />;
+      return (
+          <LeagueAuth onLeagueSelected={setActiveLeagueId} />
+      );
   }
 
-  if (!settings) return <div className="bg-auspex-bg min-h-screen text-white flex items-center justify-center">Loading Strategium...</div>;
+  if (!settings) return (
+      <div className="bg-auspex-bg min-h-screen text-imperial-gold flex flex-col items-center justify-center space-y-4">
+          <div className="w-16 h-16 border-4 border-imperial-gold border-t-transparent rounded-full animate-spin"></div>
+          <div className="uppercase tracking-widest font-bold">Establishing Vox Link...</div>
+      </div>
+  );
 
   return (
     <div className="relative">
@@ -161,7 +165,7 @@ function App() {
         {activeTab === 'dashboard' && (
             <div className="space-y-4">
                 <div className="flex justify-end gap-2">
-                     <button onClick={handleExport} className="text-xs text-imperial-gold border border-imperial-gold px-2 py-1 rounded hover:bg-imperial-gold hover:text-black">
+                    <button onClick={handleExport} className="text-xs text-imperial-gold border border-imperial-gold px-2 py-1 rounded hover:bg-imperial-gold hover:text-black">
                         Export Data
                     </button>
                     <button onClick={handleLogout} className="text-xs text-text-secondary border border-text-secondary px-2 py-1 rounded hover:bg-white/10">
