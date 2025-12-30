@@ -6,6 +6,7 @@ import {
   updateDoc, 
   deleteDoc, 
   getDocs, 
+  getDoc,
   onSnapshot,
   query,
   orderBy,
@@ -70,6 +71,14 @@ export const getLeagues = async (): Promise<League[]> => {
   return snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as DocumentData) } as League));
 };
 
+export const getLeague = async (id: string): Promise<League | null> => {
+    const d = await getDoc(doc(getDb(), "leagues", id));
+    if (d.exists()) {
+        return { id: d.id, ...(d.data() as DocumentData) } as League;
+    }
+    return null;
+};
+
 export const createLeague = async (name: string, password?: string): Promise<League> => {
   const settings: LeagueSettings = {
     name,
@@ -106,6 +115,13 @@ export const subscribeToSettings = (leagueId: string, callback: (settings: Leagu
 export const updateSettings = async (leagueId: string, settings: LeagueSettings) => {
     const leagueRef = doc(getDb(), "leagues", leagueId);
     await updateDoc(leagueRef, { settings });
+};
+
+export const deleteLeague = async (leagueId: string) => {
+    // Note: In a production environment with Firebase Functions, we would recursively delete subcollections.
+    // For this client-side implementation, deleting the parent document effectively "hides" the data 
+    // from the app navigation, which serves the purpose for this tool.
+    await deleteDoc(doc(getDb(), "leagues", leagueId));
 };
 
 // --- Player Management ---
