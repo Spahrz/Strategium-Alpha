@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
 import { configureFirebase } from '../services/firebase';
 
-const FirebaseSetup: React.FC = () => {
+interface FirebaseSetupProps {
+    onConfigured: () => void;
+}
+
+const FirebaseSetup: React.FC<FirebaseSetupProps> = ({ onConfigured }) => {
     const [configJson, setConfigJson] = useState('');
     const [error, setError] = useState('');
 
@@ -17,11 +21,6 @@ const FirebaseSetup: React.FC = () => {
                 jsonStr = jsonStr.trim().slice(0, -1);
             }
             
-            // Allow loose JSON (keys without quotes) by using a Function (safe enough for client-side config paste)
-            // or just demand strict JSON. Let's try strict JSON first, but standard Firebase console output is JS object.
-            // For simplicity/safety, let's ask for the Object content.
-            
-            // Actually, the easiest way is to ask the user to paste the object properties.
             const config = JSON.parse(jsonStr);
             
             if (!config.apiKey || !config.projectId) {
@@ -29,6 +28,7 @@ const FirebaseSetup: React.FC = () => {
             }
             
             configureFirebase(config);
+            onConfigured();
         } catch (err) {
             console.error(err);
             setError("Invalid JSON format. Please paste the configuration object strictly as JSON (keys in quotes).");
@@ -49,7 +49,7 @@ const FirebaseSetup: React.FC = () => {
                 </p>
 
                 <ol className="list-decimal list-inside text-xs text-text-secondary mb-4 space-y-1">
-                    <li>Go to <a href="https://console.firebase.google.com" target="_blank" className="text-blue-400 hover:underline">Firebase Console</a></li>
+                    <li>Go to <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">Firebase Console</a></li>
                     <li>Create Project &rarr; Add Web App</li>
                     <li>Copy the `firebaseConfig` object</li>
                     <li>Format it as JSON (keys must have quotes!)</li>

@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import MatchReporter from './components/MatchReporter';
 import PlayerManager from './components/PlayerManager';
 import Pairings from './components/Pairings';
 import LeagueAuth from './components/LeagueAuth';
+import FirebaseSetup from './components/FirebaseSetup';
 import { Player, Match, LeagueSettings, Pairing, Faction } from './types';
 import { 
   subscribeToPlayers, addPlayerToLeague, updatePlayer, removePlayer,
@@ -13,8 +14,10 @@ import {
   subscribeToPairings, addPairing, updatePairing,
   recalculateStandings
 } from './services/storageService';
+import { isFirebaseInitialized } from './services/firebase';
 
 function App() {
+  const [isFirebaseReady, setIsFirebaseReady] = useState(isFirebaseInitialized());
   const [activeLeagueId, setActiveLeagueId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   
@@ -29,7 +32,7 @@ function App() {
 
   // --- Real-time Subscriptions ---
   useEffect(() => {
-    if (!activeLeagueId) return;
+    if (!activeLeagueId || !isFirebaseReady) return;
 
     setRawPlayers([]);
     setMatches([]);
@@ -47,7 +50,7 @@ function App() {
         unsubMatches();
         unsubPairings();
     };
-  }, [activeLeagueId]);
+  }, [activeLeagueId, isFirebaseReady]);
 
   // Recalculate Standings
   useEffect(() => {
@@ -137,8 +140,6 @@ function App() {
 
   const handleExport = () => {
     if (!activeLeagueId) return;
-    // Export functionality for firebase would require fetching all collections deep
-    // For now we'll just alert that this feature is limited in cloud mode
     alert("Full JSON export is limited in cloud mode. Please use the dashboard to view data.");
   };
 
@@ -147,6 +148,10 @@ function App() {
   };
 
   // --- Views ---
+
+  if (!isFirebaseReady) {
+      return <FirebaseSetup onConfigured={() => setIsFirebaseReady(true)} />;
+  }
 
   if (!activeLeagueId) {
       return (
@@ -167,6 +172,9 @@ function App() {
         {activeTab === 'dashboard' && (
             <div className="space-y-4">
                 <div className="flex justify-end gap-2">
+                    <button onClick={handleExport} className="text-xs text-imperial-gold border border-imperial-gold px-2 py-1 rounded hover:bg-imperial-gold hover:text-black">
+                        Export Data
+                    </button>
                     <button onClick={handleLogout} className="text-xs text-text-secondary border border-text-secondary px-2 py-1 rounded hover:bg-white/10">
                         Switch League
                     </button>

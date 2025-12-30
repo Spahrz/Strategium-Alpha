@@ -39,6 +39,10 @@ export const configureFirebase = (config: FirebaseOptions) => {
     }
 };
 
+export const isFirebaseInitialized = () => {
+    return !!app && !!db;
+};
+
 // Helper function to maintain compatibility with storageService
 export const getDb = () => {
     if (!db) {

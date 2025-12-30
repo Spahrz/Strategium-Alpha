@@ -5,16 +5,20 @@ import MatchReporter from './components/MatchReporter';
 import PlayerManager from './components/PlayerManager';
 import Pairings from './components/Pairings';
 import LeagueAuth from './components/LeagueAuth';
+import FirebaseSetup from './components/FirebaseSetup';
+import LeagueSettingsManager from './components/LeagueSettingsManager';
 import { Player, Match, LeagueSettings, Pairing, Faction } from './types';
 import { 
   subscribeToPlayers, addPlayerToLeague, updatePlayer, removePlayer,
   subscribeToMatches, addMatch,
-  subscribeToSettings,
+  subscribeToSettings, updateSettings, deleteLeague, getLeague,
   subscribeToPairings, addPairing, updatePairing,
   recalculateStandings
 } from './services/storageService';
+import { isFirebaseInitialized } from './services/firebase';
 
 function App() {
+  const [isFirebaseReady, setIsFirebaseReady] = useState(isFirebaseInitialized());
   const [activeLeagueId, setActiveLeagueId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   
@@ -29,7 +33,7 @@ function App() {
 
   // --- Real-time Subscriptions ---
   useEffect(() => {
-    if (!activeLeagueId) return;
+    if (!activeLeagueId || !isFirebaseReady) return;
 
     setRawPlayers([]);
     setMatches([]);
@@ -47,7 +51,7 @@ function App() {
         unsubMatches();
         unsubPairings();
     };
-  }, [activeLeagueId]);
+  }, [activeLeagueId, isFirebaseReady]);
 
   // Recalculate Standings
   useEffect(() => {
@@ -135,6 +139,35 @@ function App() {
     } catch (e) { console.error(e); }
   };
 
+  const handleUpdateSettings = async (newSettings: LeagueSettings) => {
+    if (!activeLeagueId) return;
+    try {
+      await updateSettings(activeLeagueId, newSettings);
+    } catch (e) { console.error("Failed to update settings", e); }
+  };
+
+  const handleDeleteLeague = async (passwordAttempt: string) => {
+    if (!activeLeagueId) return;
+    try {
+      const league = await getLeague(activeLeagueId);
+      if (!league) return;
+
+      if (league.password && league.password !== passwordAttempt) {
+        alert("Incorrect Clearance Code. Exterminatus Denied.");
+        return;
+      }
+      
+      // If password matches or no password exists
+      if (confirm("Are you absolutely sure you want to delete this campaign? This action is irreversible.")) {
+        await deleteLeague(activeLeagueId);
+        setActiveLeagueId(null);
+      }
+    } catch (e) {
+      console.error("Failed to delete league", e);
+      alert("An error occurred during purge protocols.");
+    }
+  };
+
   const handleExport = () => {
     if (!activeLeagueId) return;
     alert("Full JSON export is limited in cloud mode. Please use the dashboard to view data.");
@@ -145,6 +178,10 @@ function App() {
   };
 
   // --- Views ---
+
+  if (!isFirebaseReady) {
+      return <FirebaseSetup onConfigured={() => setIsFirebaseReady(true)} />;
+  }
 
   if (!activeLeagueId) {
       return (
@@ -202,6 +239,13 @@ function App() {
                 players={players}
                 onAddPlayer={handleAddPlayer}
                 onRemovePlayer={handleRemovePlayer}
+            />
+        )}
+        {activeTab === 'admin' && (
+            <LeagueSettingsManager 
+                settings={settings}
+                onUpdateSettings={handleUpdateSettings}
+                onDeleteLeague={handleDeleteLeague}
             />
         )}
         </Layout>
