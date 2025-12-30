@@ -1,0 +1,5 @@
+{
+  "name": "Strategium: 40k League Tracker",
+  "description": "A grimdark-themed escalation league tracker for Warhammer 40k. Track standings, log matches, and generate AI-powered battle narratives.",
+  "requestFramePermissions": []
+}
